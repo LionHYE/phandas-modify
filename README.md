@@ -1,210 +1,100 @@
-<div align="center">
+# Quantitative Trading Backtesting Library
 
-<img src="https://raw.githubusercontent.com/quantbai/phandas/main/assets/PHANDAS2.png" alt="Phandas" width="500">
+This project is a modified and extended version of [quantbai/phandas](https://github.com/quantbai/phandas).
 
-[![en](https://img.shields.io/badge/lang-en-yellow.svg)](#english) &nbsp; [![zh-TW](https://img.shields.io/badge/lang-繁體中文-green.svg)](#繁體中文)
+The original project provides a foundation for quantitative trading research and backtesting.  
+This version extends its functionality with additional tools for data acquisition, strategy evaluation, sensitivity analysis, and factor deployment.
 
-</div>
+## Features
 
-## English
+### 1. Extended Data Acquisition
 
-A multi-factor quantitative trading framework for cryptocurrency markets.
+This library expands the available methods for acquiring market data, making it more flexible for different research and backtesting workflows.
 
-### Overview
+Depending on the user's needs, data can be collected, processed, and prepared for strategy testing more conveniently.
 
-Phandas is a streamlined toolkit for alpha factor research and backtesting in cryptocurrency markets. Design factors with 60+ operators, test with dollar-neutral backtesting, and analyze with professional metrics.
+### 2. Monte Carlo Backtesting
 
-### Try it now
+Monte Carlo backtesting has been added to help evaluate the robustness of trading strategies.
 
-[**Web Demo**](https://phandas.streamlit.app/) - Experience Phandas directly in your browser. No installation required.
+By repeatedly simulating different possible trading outcomes, users can better understand:
 
-### Key Features
+- Strategy stability
+- Potential drawdown risk
+- Distribution of returns
+- Risk-adjusted performance
+- Worst-case scenarios
 
-- **Data Fetching**: Multi-source OHLCV data (Binance, OKX)
-- **Factor Engine**: 60+ time-series and cross-sectional operators
-- **Neutralization**: Vector projection & regression-based orthogonalization
-- **Backtesting**: Dollar-neutral strategies with full/partial rebalancing
-- **Performance Metrics**: Sharpe, Sortino, Calmar, Max Drawdown, VaR, PSR
-- **Factor Analysis**: IC, IR, correlation, coverage, turnover
-- **MCP Integration**: AI agents (Claude) can directly access Phandas
+This feature is useful for testing whether a strategy remains reliable under different market conditions.
 
-### Installation
+### 3. 2D and 3D Sensitivity Analysis
 
-```bash
-pip install phandas
-```
+This project includes both two-dimensional and three-dimensional sensitivity analysis tools.
 
-### Quick Start
+These tools help users understand how strategy performance changes when key parameters are adjusted.
 
-```python
-from phandas import *
+Supported analysis types include:
 
-# Fetch market data
-panel = fetch_data(
-    symbols=['ETH', 'SOL', 'ARB', 'OP', 'POL', 'SUI'],
-    timeframe='1d',
-    start_date='2023-01-01',
-    sources=['binance'],
-)
+- 2D parameter sensitivity analysis
+- 3D parameter sensitivity analysis
+- Visualization of performance changes across parameter combinations
 
-# Extract factors
-close = panel['close']
-volume = panel['volume']
-open = panel['open']
+This is especially useful for:
 
-# Construct momentum factor
-momentum_20 = (close / close.ts_delay(20)) - 1
+- Parameter optimization
+- Robustness testing
+- Avoiding overfitting
+- Understanding strategy behavior
 
-# Neutralize against volume
-factor = vector_neut(rank(momentum_20), rank(-volume))
+### 4. Factor Deployment Helper
 
-# Backtest strategy
-result = backtest(
-    entry_price_factor=open, 
-    strategy_factor=factor,
-    transaction_cost=(0.0003, 0.0003)
-)
+A helper function has been added for factor deployment.
 
-result.plot_equity()
-```
+When deploying a factor-based strategy, this function can return:
 
-### AI Integration via MCP
+- Trading pairs
+- Corresponding factor values
+- Weight ratios based on factor values
 
-Use Phandas with AI IDEs (Cursor, Claude Desktop) directly—no coding required.
+This makes it easier to transform research results into deployable trading signals or portfolio weights.
 
-**Setup for Cursor (Recommended)**
+## Project Origin
 
-1. `pip install phandas`
-2. Open Cursor → Settings → Tools & MCP → **New MCP Server**
-3. Paste the JSON config below, save and restart
+This project is based on:
 
-```json
-{
-  "mcpServers": {
-    "phandas": {
-      "command": "python",
-      "args": ["-m", "phandas.mcp_server"]
-    }
-  }
-}
-```
+[quantbai/phandas](https://github.com/quantbai/phandas)
 
-**Available Tools (4 Functions)**
+Special thanks to the original author for providing the foundation of this library.
 
-- `fetch_market_data`: Get OHLCV data for symbols
-- `list_operators`: Browse all 50+ factor operators
-- `read_source`: View source code of any function
-- `execute_factor_backtest`: Backtest custom factor expressions
+## Main Modifications
 
----
+Compared with the original version, this modified version includes the following major changes:
 
-## 繁體中文
+1. Expanded data acquisition methods
+2. Added Monte Carlo backtesting
+3. Added 2D and 3D sensitivity analysis
+4. Added a deployment helper function for returning trading pairs, factor values, and weight ratios
 
-一個專為加密貨幣市場設計的多因子量化交易框架。
+## Use Cases
 
-### 概述
+This library is suitable for:
 
-Phandas 是一個精簡的加密貨幣因子研究與回測工具。提供 60+ 運算子設計因子、美元中性回測、專業績效指標分析。
+- Quantitative trading research
+- Strategy backtesting
+- Factor testing
+- Parameter sensitivity analysis
+- Monte Carlo simulation
+- Portfolio weight generation
+- Strategy deployment preparation
 
-### 立即體驗
+## Disclaimer
 
-[**網頁演示**](https://phandas.streamlit.app/) - 直接在瀏覽器中體驗 Phandas，無需安裝。
+This project is intended for research and educational purposes only.
 
-### 核心功能
-
-- **資料獲取**：多源 OHLCV 資料（Binance、OKX）
-- **因子引擎**：60+ 時間序列與橫截面運算子
-- **因子中性化**：向量投影與迴歸正交化
-- **回測引擎**：美元中性策略、全/部分調倉
-- **績效指標**：夏普比、Sortino、Calmar、最大回撤、VaR、PSR
-- **因子分析**：IC、IR、相關性、覆蓋率、換手率
-- **MCP 集成**：AI 代理（Claude）可直接調用 Phandas
-
-### 安裝
-
-```bash
-pip install phandas
-```
-
-### 快速開始
-
-```python
-from phandas import *
-
-# 獲取市場資料
-panel = fetch_data(
-    symbols=['ETH', 'SOL', 'ARB', 'OP', 'POL', 'SUI'],
-    timeframe='1d',
-    start_date='2023-01-01',
-    sources=['binance'],
-)
-
-# 提取因子
-close = panel['close']
-volume = panel['volume']
-open = panel['open']
-
-# 構建動量因子
-momentum_20 = (close / close.ts_delay(20)) - 1
-
-# 對成交量進行中性化
-factor = vector_neut(rank(momentum_20), rank(-volume))
-
-# 回測策略
-result = backtest(
-    entry_price_factor=open, 
-    strategy_factor=factor,
-    transaction_cost=(0.0003, 0.0003)
-)
-
-result.plot_equity()
-```
-
-### AI 集成（MCP 支援）
-
-在 AI IDE（Cursor、Claude Desktop）中直接使用 Phandas—無需編碼。
-
-**Cursor 設定（推薦）**
-
-1. `pip install phandas`
-2. 開啟 Cursor → Settings → Tools & MCP → **New MCP Server**
-3. 貼上下方 JSON 配置，儲存並重啟
-
-```json
-{
-  "mcpServers": {
-    "phandas": {
-      "command": "python",
-      "args": ["-m", "phandas.mcp_server"]
-    }
-  }
-}
-```
-
-**可用工具（4 個函數）**
-
-- `fetch_market_data`: 獲取代幣 OHLCV 資料
-- `list_operators`: 瀏覽 50+ 因子運算子
-- `read_source`: 查看任何函數的源代碼
-- `execute_factor_backtest`: 回測自訂因子表達式
-
----
-
-## Documentation | 文檔
-
-- [Full Docs](https://phandas.readthedocs.io/) - Complete API reference
-- [Operators Guide](https://phandas.readthedocs.io/guide/operators_guide.html) - 50+ operators
-- [MCP Setup](https://phandas.readthedocs.io/mcp_setup.html) - AI IDE integration
-
----
-
-## Community & Support | 社群與支持
-
-- **Discord**: [Join us - Phantom Management](https://discord.gg/TcPHTSGMdH)
-- **GitHub Issues**: [Report bugs or request features](https://github.com/quantbai/phandas/issues)
+Trading financial markets involves risk.  
+Past performance does not guarantee future results.  
+Please use this library responsibly and perform your own risk assessment before applying any strategy in live trading.
 
 ## License
 
-This project is licensed under the BSD 3-Clause License - see [LICENSE](LICENSE) file for details.
-
-
+Please refer to the license of the original project and update this section according to your own modifications and distribution requirements.
