@@ -3,12 +3,26 @@
 __author__ = "Phantom Management"
 __version__ = "0.18.1"
 
+from .deploy import deploy_factor
+
 from .core import Factor
 from .panel import Panel
 
-from .data import fetch_data
+from .data import (
+    fetch_data,
+    fetch_binance,
+    fetch_bybit,
+    fetch_benchmark,
+    fetch_calendar,
+    fetch_vwap,
+    
+    # 新增的 Bybit 相關函數和類別
+    BybitDataFetcher,
+    fetch_bybit_all,
+    calculate_orderbook_metrics
+)
 
-from .backtest import backtest, Backtester
+from .backtest import backtest, Backtester, monte_backtest
 
 from .analysis import analyze, FactorAnalyzer
 
@@ -36,12 +50,16 @@ from .operators import (
     show, to_csv, to_df,
 )
 
+from .heatmap import run_parameter_sweep, SensitivityResult
+
 __all__ = [
+    'deploy_factor',
+
     'Factor', 'Panel',
-    
-    'fetch_data',
-    
-    'backtest', 'Backtester',
+
+    'fetch_data', 'fetch_binance', 'fetch_bybit', 'fetch_benchmark', 'fetch_calendar', 'fetch_vwap', 'BybitDataFetcher', 'fetch_bybit_all', 'calculate_orderbook_metrics', 
+
+    'backtest', 'Backtester', 'monte_backtest',
 
     'analyze', 'FactorAnalyzer',
 
@@ -66,4 +84,6 @@ __all__ = [
     'add', 'multiply', 'subtract', 'divide', 'reverse', 'where',
     
     'show', 'to_csv', 'to_df',
+
+    'run_parameter_sweep', 'SensitivityResult'
 ]
