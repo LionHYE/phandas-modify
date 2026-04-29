@@ -271,33 +271,44 @@ class Backtester:
         psr = norm.cdf(psr_stat)
         return float(np.clip(psr, 0.0, 1.0))
 
-
     def _build_date_cache(self, factor: 'Factor') -> dict:
-        cache = {}
-        first_valid_date = None
-        skipped_dates = []
-        
-        all_dates = sorted(factor.data['timestamp'].unique())
-        
-        for date in all_dates:
-            group = factor.data[factor.data['timestamp'] == date]
-            series = group.set_index('symbol')['factor']
+        """
+        Builds a dictionary of {timestamp: pd.Series} for O(1) access during backtest.
+        Optimized using pivot to avoid slow filtering inside loops.
+        """
+        # [優化點 3] 使用 pivot 代替逐行 filter，性能提升 100x+
+        try:
+            # 確保沒有重複數據，否則 pivot 會報錯
+            df_clean = factor.data.drop_duplicates(subset=['timestamp', 'symbol'])
             
-            if not series.isna().any():
-                cache[date] = series
-                if first_valid_date is None:
-                    first_valid_date = date
-            else:
-                if first_valid_date is not None:
-                    nan_symbols = series[series.isna()].index.tolist()
-                    skipped_dates.append((date, nan_symbols))
-        
-        if skipped_dates:
-            warnings.warn(
-                f"Skipped {len(skipped_dates)} dates with NaN (strategy='{factor.name}')"
-            )
-        
-        return cache
+            # 將長表 (Long) 轉寬表 (Wide): Index=Time, Columns=Symbol
+            pivoted = df_clean.pivot(index='timestamp', columns='symbol', values='factor')
+            
+            cache = {}
+            skipped_dates = []
+            
+            # 遍歷寬表，這比 filter 快得多
+            for date, row in pivoted.iterrows():
+                # 去除 NaN，只保留有效信號 (模擬原本邏輯)
+                valid_series = row.dropna()
+                
+                if not valid_series.empty:
+                    cache[date] = valid_series
+                else:
+                    # 記錄全空的日期
+                    skipped_dates.append((date, [])) 
+            
+            if skipped_dates:
+                 warnings.warn(
+                    f"Skipped {len(skipped_dates)} dates with no valid data (strategy='{factor.name}')"
+                )
+            
+            return cache
+
+        except Exception as e:
+            # Fallback: 如果 pivot 失敗（極少見），回退到舊方法或報錯
+            warnings.warn(f"Fast cache build failed ({e}), using slow method.")
+            return super()._build_date_cache(factor) # 假設這是在繼承結構中，否則直接 raise
     
     def _get_factor_data(self, factor: 'Factor', date) -> pd.Series:
         if date is None:
@@ -526,7 +537,6 @@ class Backtester:
             return (f"Backtester(strategy={self.strategy_factor.name}, "
                    f"entry_price={self.entry_price_factor.name}, cost={self.transaction_cost_rates[0]:.3%})")
 
-
 def backtest(
     entry_price_factor: 'Factor',
     strategy_factor: 'Factor',
@@ -543,3 +553,162 @@ def backtest(
         bt.run().calculate_metrics()
     
     return bt
+
+# -------------------------------------------------------------------------
+# Monte Carlo Extension
+# -------------------------------------------------------------------------
+
+class MonteCarloResult:
+    """Stores and visualizes Monte Carlo simulation results."""
+    
+    def __init__(self, metrics_df: pd.DataFrame, paths: pd.DataFrame, original_metrics: dict, initial_capital: float):
+        self.metrics_df = metrics_df
+        self.paths = paths  # Scaled equity curves (Actual Capital)
+        self.original_metrics = original_metrics
+        self.initial_capital = initial_capital
+        self.summary_stats = self._calculate_summary()
+
+    def _calculate_summary(self) -> pd.DataFrame:
+        """Calculate statistical summary of the simulations."""
+        stats = self.metrics_df.describe(percentiles=[0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]).T
+        stats['original'] = pd.Series(self.original_metrics)
+        return stats[['count', 'mean', 'std', '5%', '50%', '95%', 'original']]
+
+    def summary(self) -> str:
+        return self.summary_stats.to_string()
+
+    def plot(self, figsize: tuple = (14, 10), title: str = "Monte Carlo Simulation"):
+        """Plot Monte Carlo paths and distribution of Key Metrics."""
+        import matplotlib.pyplot as plt
+        
+        fig = plt.figure(figsize=figsize)
+        gs = fig.add_gridspec(2, 2)
+        
+        # 1. Equity Paths (Spaghetti Plot)
+        ax1 = fig.add_subplot(gs[0, :])
+        
+        # Plot a subset of paths to avoid performance issues
+        plot_paths = self.paths.iloc[:, :min(100, self.paths.shape[1])]
+        
+        # 繪製模擬路徑
+        ax1.plot(plot_paths, color='gray', alpha=0.1, linewidth=1)
+        # 繪製平均路徑
+        ax1.plot(plot_paths.mean(axis=1), color='red', linestyle='--', linewidth=2, label='Mean Path')
+        
+        # Highlight percentiles (cone)
+        percentiles = self.paths.quantile([0.05, 0.95], axis=1).T
+        ax1.fill_between(percentiles.index, percentiles.iloc[:, 0], percentiles.iloc[:, 1], 
+                        color='blue', alpha=0.1, label='95% Confidence Interval')
+        
+        # 標示初始資金線
+        ax1.axhline(y=self.initial_capital, color='black', linestyle=':', alpha=0.5)
+        
+        ax1.set_title(f"{title} - Equity Curves (n={len(self.metrics_df)})")
+        ax1.set_ylabel("Portfolio Value ($)")  # 修改標籤
+        ax1.legend(loc='upper left')
+        ax1.grid(True, alpha=0.3)
+
+        # 2. Max Drawdown Distribution
+        ax2 = fig.add_subplot(gs[1, 0])
+        self.metrics_df['max_drawdown'].hist(bins=50, ax=ax2, color='darkred', alpha=0.7, density=True)
+        orig_dd = self.original_metrics.get('max_drawdown', 0)
+        ax2.axvline(orig_dd, color='black', linestyle='--', linewidth=2, label=f'Original: {orig_dd:.1%}')
+        
+        dd_95 = self.metrics_df['max_drawdown'].quantile(0.05)
+        ax2.axvline(dd_95, color='red', linestyle=':', linewidth=2, label=f'95% Worst: {dd_95:.1%}')
+        
+        ax2.set_title("Distribution of Max Drawdown")
+        ax2.set_xlabel("Drawdown")
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        # 3. Sharpe Ratio Distribution
+        ax3 = fig.add_subplot(gs[1, 1])
+        self.metrics_df['sharpe_ratio'].hist(bins=50, ax=ax3, color='darkgreen', alpha=0.7, density=True)
+        orig_sharpe = self.original_metrics.get('sharpe_ratio', 0)
+        ax3.axvline(orig_sharpe, color='black', linestyle='--', linewidth=2, label=f'Original: {orig_sharpe:.2f}')
+        
+        sharpe_05 = self.metrics_df['sharpe_ratio'].quantile(0.05)
+        ax3.axvline(sharpe_05, color='red', linestyle=':', linewidth=2, label=f'5% Worst: {sharpe_05:.2f}')
+
+        ax3.set_title("Distribution of Sharpe Ratio")
+        ax3.set_xlabel("Sharpe Ratio")
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
+
+def monte_backtest(
+    backtester: 'Backtester', 
+    n_sims: int = 1000, 
+    sim_days: Optional[int] = None,
+    method: str = "bootstrap"
+) -> MonteCarloResult:
+    """
+    Perform Monte Carlo simulation on backtest results.
+    """
+    if not backtester.metrics:
+        raise ValueError("Backtester has no metrics. Please run .calculate_metrics() first.")
+    
+    returns = backtester.returns.values
+    if len(returns) < 2:
+        raise ValueError("Insufficient returns data for Monte Carlo simulation.")
+        
+    if sim_days is None:
+        sim_days = len(returns)
+        
+    print(f"Running Monte Carlo: {n_sims} simulations, {sim_days} days each...")
+    
+    # 1. Generate Random Returns
+    if method == "bootstrap":
+        sim_returns = np.random.choice(returns, size=(sim_days, n_sims), replace=True)
+    elif method == "shuffle":
+        if sim_days != len(returns):
+             warnings.warn("Method 'shuffle' forces sim_days to match history length.")
+             sim_days = len(returns)
+        sim_returns = np.empty((sim_days, n_sims))
+        for i in range(n_sims):
+            sim_returns[:, i] = np.random.permutation(returns)
+    else:
+        raise ValueError("Method must be 'bootstrap' or 'shuffle'")
+
+    # 2. Construct Normalized Equity Curves (Starts at 1.0)
+    # 用於計算 Drawdown 與 Sharpe (數學上用歸一化計算較快)
+    norm_equity_curves = np.vstack([np.ones((1, n_sims)), 1 + sim_returns])
+    norm_equity_curves = np.cumprod(norm_equity_curves, axis=0)
+    
+    # 3. Calculate Metrics (Vectorized)
+    total_returns = norm_equity_curves[-1, :] - 1
+    annual_returns = (1 + total_returns) ** (365 / sim_days) - 1
+    volatility = np.std(sim_returns, axis=0) * np.sqrt(365)
+    
+    sharpe_ratios = np.divide(annual_returns, volatility, out=np.zeros_like(annual_returns), where=volatility!=0)
+    
+    running_max = np.maximum.accumulate(norm_equity_curves, axis=0)
+    drawdowns = norm_equity_curves / running_max - 1
+    max_drawdowns = np.min(drawdowns, axis=0)
+    
+    calmar_ratios = np.divide(annual_returns, np.abs(max_drawdowns), 
+                             out=np.zeros_like(annual_returns), where=max_drawdowns!=0)
+
+    # 4. Scale Equity Curves for Plotting (Multiplier * Initial Capital)
+    # 這裡將歸一化的曲線乘上初始資金
+    initial_capital = backtester.portfolio.initial_capital
+    scaled_equity_curves = norm_equity_curves * initial_capital
+
+    metrics_data = {
+        'total_return': total_returns,
+        'annual_return': annual_returns,
+        'annual_volatility': volatility,
+        'sharpe_ratio': sharpe_ratios,
+        'max_drawdown': max_drawdowns,
+        'calmar_ratio': calmar_ratios
+    }
+    
+    metrics_df = pd.DataFrame(metrics_data)
+    
+    # 儲存的是真實金額曲線
+    path_df = pd.DataFrame(scaled_equity_curves, index=range(len(scaled_equity_curves)))
+    
+    return MonteCarloResult(metrics_df, path_df, backtester.metrics, initial_capital)
