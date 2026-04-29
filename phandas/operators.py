@@ -1,6 +1,8 @@
 """Functional operator API for Factor operations."""
 
 from typing import Union, List, Optional
+
+import pandas as pd
 from .core import Factor 
 
 

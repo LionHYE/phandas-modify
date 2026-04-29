@@ -11,13 +11,12 @@ MIN_NOTIONAL_USD = 0.01
 MIN_TRADE_VALUE = 1.0
 
 MATRIX_COND_THRESHOLD = 1e10
-
 SYMBOL_RENAMES = {
     'POL': {
         'old_symbol': 'MATIC',
         'new_symbol': 'POL',
         'cutoff_date': '2024-09-01',
-    }
+    },
 }
 
 GROUP_DEFINITIONS = {
